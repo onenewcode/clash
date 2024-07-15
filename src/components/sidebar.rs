@@ -1,12 +1,10 @@
-use std::{
-    default,
-    sync::{atomic::AtomicUsize, mpsc::Receiver},
-    vec,
-};
+
+
+use std::sync::{atomic::AtomicUsize, mpsc::Receiver};
 
 use eframe::egui::{
-    self, panel::Side, text::LayoutJob, Button, Color32, Context, FontFamily, FontId, Label,
-    Response, TextFormat, Ui,
+    self,  text::LayoutJob,  Color32, FontFamily, FontId, Label,
+ TextFormat, 
 };
 pub const SIDE_BAR: &str = "side_bar";
 pub enum State {

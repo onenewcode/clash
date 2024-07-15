@@ -2,7 +2,6 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use core::time;
 use std::{sync::mpsc::{self, Receiver}, time::Duration};
 
 use clash::components::sidebar::{SideBar, SIDE_BAR};
