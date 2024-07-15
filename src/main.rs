@@ -1,76 +1,101 @@
-//! This example shows that you can use egui in parallel from multiple threads.
-
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
-use std::{sync::mpsc::{self, Receiver}, time::Duration};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
-use clash::components::sidebar::{SideBar, SIDE_BAR};
 use eframe::egui;
-use rand::Rng;
 
-fn main() -> Result<(), eframe::Error> {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+fn main() -> eframe::Result {
+    env_logger::init();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1024.0, 768.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
-    
-    let (sender, receiver) = mpsc::channel::<(f32, f32)>();
-    let mut app=Box::new(MyApp::new(receiver));
-    app.sidebar.open_receiver();
-    // 新建一个线程作作为生产者
-    std::thread::spawn(move || {
-        loop {
-            // 生成一个介于 -1.0 到 1.0 之间的随机浮点数
-            match sender.send((rand::thread_rng().gen_range(-1.0..=1.0),rand::thread_rng().gen_range(-1.0..=1.0))) {
-                Ok(_) => println!("Message sent successfully"),
-                Err(e) => println!("Failed to send message: {}", e),
-            }
-            std::thread::sleep(Duration::from_secs_f32(0.5));
-        }
-    });
     eframe::run_native(
-        "My parallel egui App",
+        "Multiple viewports",
         options,
-        Box::new(|_cc| Ok(app)),
+        Box::new(|_cc| Ok(Box::<MyApp>::default())),
     )
 }
 
+#[derive(Default)]
 struct MyApp {
-    sidebar: SideBar,
-}
+    /// Immediate viewports are show immediately, so passing state to/from them is easy.
+    /// The downside is that their painting is linked with the parent viewport:
+    /// if either needs repainting, they are both repainted.
+    show_immediate_viewport: bool,
 
-impl MyApp {
-    fn new(receiver: Receiver<(f32, f32)>) -> Self {
-        Self {
-            sidebar: SideBar::new("test".to_owned(), receiver),
-        }
-    }
-}
-
-impl std::ops::Drop for MyApp {
-    fn drop(&mut self) {}
+    /// Deferred viewports run independent of the parent viewport, which can save
+    /// CPU if only some of the viewports require repainting.
+    /// However, this requires passing state with `Arc` and locks.
+    show_deferred_viewport: Arc<AtomicBool>,
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.sidebar.show(ctx);
-        });
-        // 获取组件
-        let sideBar = ctx.read_response(SIDE_BAR.into()).unwrap();
-        // 获取组件矩形区域
-        // sideBar.rect
+            ui.label("Hello from the root viewport");
 
-        egui::Area::new(egui::Id::new("my_area"))
-            .fixed_pos(egui::pos2(100.0, 100.0))
-            .show(ctx, |ui| match self.sidebar.state {
-                clash::components::sidebar::State::Default => {
-                    ui.label("Default");
-                }
-                clash::components::sidebar::State::General => {
-                    ui.label("General");
-                }
-            });
+            ui.checkbox(
+                &mut self.show_immediate_viewport,
+                "Show immediate child viewport",
+            );
+           
+            let mut show_deferred_viewport = self.show_deferred_viewport.load(Ordering::Relaxed);
+            ui.checkbox(&mut show_deferred_viewport, "Show deferred child viewport");
+            self.show_deferred_viewport
+                .store(show_deferred_viewport, Ordering::Relaxed);
+        });
+
+        if self.show_immediate_viewport {
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("immediate_viewport"),
+                egui::ViewportBuilder::default()
+                    .with_title("Immediate Viewport")
+                    .with_inner_size([200.0, 100.0]),
+                |ctx, class| {
+                    assert!(
+                        class == egui::ViewportClass::Immediate,
+                        "This egui backend doesn't support multiple viewports"
+                    );
+
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.label("Hello from immediate viewport");
+                    });
+
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        // Tell parent viewport that we should not show next frame:
+                        self.show_immediate_viewport = false;
+                    }
+                },
+            );
+        }
+
+        if self.show_deferred_viewport.load(Ordering::Relaxed) {
+            let show_deferred_viewport = self.show_deferred_viewport.clone();
+            ctx.show_viewport_deferred(
+                egui::ViewportId::from_hash_of("deferred_viewport"),
+                egui::ViewportBuilder::default()
+                    .with_title("Deferred Viewport")
+                    .with_inner_size([200.0, 100.0]),
+                move |ctx, class| {
+                    assert!(
+                        class == egui::ViewportClass::Deferred,
+                        "This egui backend doesn't support multiple viewports"
+                    );
+
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.label("Hello from deferred viewport");
+                    });
+                    if ctx.input(|i| i.viewport().close_requested()) {
+                        // Tell parent to close us.
+                        show_deferred_viewport.store(false, Ordering::Relaxed);
+                    }
+                },
+            );
+        }
     }
 }
