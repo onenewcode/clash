@@ -398,19 +398,19 @@ impl RotatingTriangle {
                     shader
                 })
                 .collect();
-
+            // 检查链接状态
             gl.link_program(program);
             assert!(
                 gl.get_program_link_status(program),
                 "{}",
                 gl.get_program_info_log(program)
             );
-
+            // 清理不需要的着色器
             for shader in shaders {
                 gl.detach_shader(program, shader);
                 gl.delete_shader(shader);
             }
-
+            // 创建顶点数组对象
             let vertex_array = gl
                 .create_vertex_array()
                 .expect("Cannot create vertex array");
