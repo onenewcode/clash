@@ -1,38 +1,29 @@
-
-
 use std::sync::{atomic::AtomicUsize, mpsc::Receiver};
-
 use eframe::egui::{
     self,  text::LayoutJob,  Color32, FontFamily, FontId, Label,
  TextFormat, 
 };
 pub const SIDE_BAR: &str = "side_bar";
-pub enum State {
+// 侧边栏按钮的状态
+enum State {
     Default,
     General,
 }
-// 全局变量
-static GLOBAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+#[derive(Default)]
 pub struct SideBar {
+    // 侧边栏,标头名称
     title: String,
-    pub state: State,
-    // 判断是否开启网络请求
-    rbool: bool,
-    // 用于接受，网络上传，下载的速度
-    // 第一个上传，第二个下载
-    receiver: Receiver<(f32, f32)>,
+    // 按钮列表
+    bottons: Vec<egui::Button>,
+    // 按钮名称列表
+    botton_names: Vec<String>,
+    // 按钮状态
+    states:Vec<State>,
 }
 impl SideBar {
     pub fn show(&mut self, ctx: &egui::Context) {
         let side_panel = egui::SidePanel::left(SIDE_BAR);
         side_panel.resizable(false).show(ctx, |ui| {
-            // 在下一个小部件之前添加额外的空间。
-            // ui.add_space  colored_label
-            // 添加可选按钮
-            //        ui.add(egui::Checkbox::new(&mut my_bool, "Checked"));
-
-            // ui.colored_label(Color32::BLUE, "test".to_owned());
-            //  添加按钮
             ui.add(self.upload_lable());
             let mut page = Vec::with_capacity(5);
             page.push((State::Default, egui::Button::new("Default")));
@@ -50,17 +41,12 @@ impl SideBar {
             });
         });
     }
-    // 构建上传信息的标签
     fn upload_lable(&self) -> Label {
-        // 用于控制布局
         let mut job = LayoutJob::default();
-      
         let mut speed = format!("0k \n,0k");
         if self.rbool == true {
-            //   接受网络速率的数据
             match self.receiver.try_recv() {
                 Ok((up,down)) => speed = format!("{}k \n,{}k", up, down),
-                // 寄存上一个frame todo
                 Err(r) =>{
                     format!("{}",r);
                 },
@@ -89,9 +75,7 @@ impl SideBar {
         Self {
             // c:ctx,
             title: title,
-            state: State::Default,
-            rbool: false,
-            receiver: receiver,
+            ..Default::default()
         }
     }
 }

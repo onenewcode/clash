@@ -1,134 +1,59 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
-use eframe::{egui, CreationContext, NativeOptions};
-use egui::{Button, CentralPanel, Context, UserAttentionType};
-
-use std::time::{Duration, SystemTime};
+use eframe::egui;
 
 fn main() -> eframe::Result {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-    let native_options = NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400., 200.]),
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "User attention test",
-        native_options,
-        Box::new(|cc| Ok(Box::new(Application::new(cc)))),
+        "Confirm exit",
+        options,
+        Box::new(|_cc| Ok(Box::<MyApp>::default())),
     )
 }
 
-fn repr(attention: UserAttentionType) -> String {
-    format!("{attention:?}")
+#[derive(Default)]
+struct MyApp {
+    show_confirmation_dialog: bool,
+    allowed_to_close: bool,
 }
 
-struct Application {
-    attention: UserAttentionType,
-    request_at: Option<SystemTime>,
-
-    auto_reset: bool,
-    reset_at: Option<SystemTime>,
-}
-
-impl Application {
-    fn new(_cc: &CreationContext<'_>) -> Self {
-        Self {
-            attention: UserAttentionType::Informational,
-            request_at: None,
-            auto_reset: false,
-            reset_at: None,
-        }
-    }
-
-    fn attention_reset_timeout() -> Duration {
-        Duration::from_secs(3)
-    }
-
-    fn attention_request_timeout() -> Duration {
-        Duration::from_secs(2)
-    }
-
-    fn repaint_max_timeout() -> Duration {
-        Duration::from_secs(1)
-    }
-}
-
-impl eframe::App for Application {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if let Some(request_at) = self.request_at {
-            if request_at < SystemTime::now() {
-                self.request_at = None;
-                ctx.send_viewport_cmd(egui::ViewportCommand::RequestUserAttention(self.attention));
-                if self.auto_reset {
-                    self.auto_reset = false;
-                    self.reset_at = Some(SystemTime::now() + Self::attention_reset_timeout());
-                }
-            }
-        }
-
-        if let Some(reset_at) = self.reset_at {
-            if reset_at < SystemTime::now() {
-                self.reset_at = None;
-                ctx.send_viewport_cmd(egui::ViewportCommand::RequestUserAttention(
-                    UserAttentionType::Reset,
-                ));
-            }
-        }
-
-        CentralPanel::default().show(ctx, |ui| {
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Attention type:");
-                    egui::ComboBox::new("attention", "")
-                        .selected_text(repr(self.attention))
-                        .show_ui(ui, |ui| {
-                            for kind in [
-                                UserAttentionType::Informational,
-                                UserAttentionType::Critical,
-                            ] {
-                                ui.selectable_value(&mut self.attention, kind, repr(kind));
-                            }
-                        })
-                });
-
-                let button_enabled = self.request_at.is_none() && self.reset_at.is_none();
-                let button_text = if button_enabled {
-                    format!(
-                        "Request in {} seconds",
-                        Self::attention_request_timeout().as_secs()
-                    )
-                } else {
-                    match self.reset_at {
-                        None => "Unfocus the window, fast!".to_owned(),
-                        Some(t) => {
-                            if let Ok(elapsed) = t.duration_since(SystemTime::now()) {
-                                format!("Resetting attention in {} s…", elapsed.as_secs())
-                            } else {
-                                "Resetting attention…".to_owned()
-                            }
-                        }
-                    }
-                };
-
-                let resp = ui
-                    .add_enabled(button_enabled, Button::new(button_text))
-                    .on_hover_text_at_pointer(
-                        "After clicking, unfocus the application's window to see the effect",
-                    );
-
-                ui.checkbox(
-                    &mut self.auto_reset,
-                    format!(
-                        "Reset after {} seconds",
-                        Self::attention_reset_timeout().as_secs()
-                    ),
-                );
-
-                if resp.clicked() {
-                    self.request_at = Some(SystemTime::now() + Self::attention_request_timeout());
-                }
-            });
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Try to close the window");
         });
 
-        ctx.request_repaint_after(Self::repaint_max_timeout());
+        if ctx.input(|i| i.viewport().close_requested()) {
+            if self.allowed_to_close {
+                // do nothing - we will close
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.show_confirmation_dialog = true;
+            }
+        }
+
+        if self.show_confirmation_dialog {
+            egui::Window::new("Do you want to quit?")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("No").clicked() {
+                            self.show_confirmation_dialog = false;
+                            self.allowed_to_close = false;
+                        }
+
+                        if ui.button("Yes").clicked() {
+                            self.show_confirmation_dialog = false;
+                            self.allowed_to_close = true;
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    });
+                });
+        }
     }
 }
