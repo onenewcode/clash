@@ -22,24 +22,30 @@ pub struct SideBar {
 impl SideBar {
     // 渲染侧边栏
     pub fn show(&mut self, ctx: &egui::Context) {
+        let size = ctx.available_rect();
         // 生成侧边Panel,同时禁止侧边栏拖动，
-        let side_panel = egui::SidePanel::left(SIDE_BAR).resizable(false);
+        let side_panel = egui::SidePanel::left(SIDE_BAR)
+            .resizable(false)
+            .default_width(size.width() / 4.);
+        // todo 指定宽度
         // let rec=side_panel.
         side_panel.show(ctx, |ui| {
             // 渲染标题
             // 逐个渲染按钮
-            (0..self.button_names.len())
-                .into_iter()
-                .for_each(|i| match self.states[i] {
-                    State::Checked => {
-                        ui.button(self.button_names[i].clone()).highlight();
-                    }
-                    State::UnChecked => {
-                        if ui.button(self.button_names[i].clone()).clicked() {
-                            self.refresh_button(i);
-                        }
-                    }
-                })
+                ui.horizontal_centered(|ui| {
+                    (0..self.button_names.len())
+                        .into_iter()
+                        .for_each(|i| match self.states[i] {
+                            State::Checked => {
+                                ui.button(self.button_names[i].clone()).highlight();
+                            }
+                            State::UnChecked => {
+                                if ui.button(self.button_names[i].clone()).clicked() {
+                                    self.refresh_button(i);
+                                }
+                            }
+                        })
+            });
         });
     }
     // 用于更新按钮被被点击后的状态,index为按钮下标

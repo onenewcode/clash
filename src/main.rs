@@ -21,6 +21,8 @@ struct MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // 一个可以存储自定义数据的位置，该数据在重新启动应用程序时仍然存在。
+        //frame storage_mut
         self.side_bar.show(ctx);
         self.center.show(ctx);
     }
